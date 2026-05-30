@@ -1,40 +1,93 @@
 #!/bin/bash
-
 # ---------------------------------------------------
 # Bloqueo de tráfico BitTorrent con iptables + ipset
 # ---------------------------------------------------
-#  - Detección profunda de paquetes (hasta 1500 bytes)
-#  - Bloqueo temporal de direcciones IP
-#  - Manejo de listas de ignorados (DNS, rangos específicos, IPs del servidor)
-# ---------------------------------------------------
-
-# Verificar si se está ejecutando como root
 if [ "$(id -u)" != "0" ]; then
    echo "Este script debe ejecutarse como root" >&2
    exit 1
 fi
 
-# ---------------------------------------------------
-# CONFIGURACIÓN
-# ---------------------------------------------------
 IPSET_NAME="torrent_block"
-
-# Detectar la interfaz por defecto automáticamente
 default_int=$(ip route list | grep '^default' | grep -oP 'dev \K\S+')
-
-# Definir las interfaces que deseas monitorear/bloquear
-# Añade o modifica tus interfaces aquí y agrega la interfaz por defecto si no está ya incluida
 INITIAL_INTERFACES=("tun0" "tun1" "eth0")
 
-# Función para agregar la interfaz por defecto si no está en la lista inicial
-add_default_interface() {
-    local default_interface="$1"
-    local exists=false
+for intf in "${INITIAL_INTERFACES[@]}"; do
+    if [ "$intf" == "$default_int" ]; then exists=true; break; fi
+done
+if [ "$exists" != true ] && [ -n "$default_int" ]; then
+    INTERFACES=("${INITIAL_INTERFACES[@]}" "$default_int")
+else
+    INTERFACES=("${INITIAL_INTERFACES[@]}")
+fi
 
-    for intf in "${INITIAL_INTERFACES[@]}"; do
-        if [ "$intf" == "$default_interface" ]; then
-            exists=true
-            break
+LOG_PREFIX="TORRENT_BLOCK"
+MAX_ENTRIES=100000
+BLOCK_DURATION=18000
+HIGH_PORTS="6881:65535"
+SERVER_IPS=$(ip -o addr show | awk '!/^[0-9]+: lo:/ && $3 == "inet" {split($4, a, "/"); print a[1]}')
+
+is_server_ip() {
+    for x in $SERVER_IPS; do if [ "$1" == "$x" ]; then return 0; fi; done
+    return 1
+}
+is_dns_ip() {
+    for x in "8.8.8.8" "8.8.4.4" "1.1.1.1" "1.0.0.1"; do if [ "$1" == "$x" ]; then return 0; fi; done
+    return 1
+}
+is_ignored_ip_range() {
+    if [[ $1 =~ ^10\.9\.[0-3]\.[0-9]{1,3}$ ]] || [[ $1 =~ ^10\.8\.[0-3]\.[0-9]{1,3}$ ]]; then return 0; else return 1; fi
+}
+
+if ! ipset list -n | grep -qw "$IPSET_NAME"; then
+    ipset create "$IPSET_NAME" hash:ip maxelem "$MAX_ENTRIES"
+fi
+iptables-save | grep -v "$IPSET_NAME" | iptables-restore
+
+for chain in INPUT OUTPUT FORWARD; do
+    iptables -I "$chain" -m set --match-set "$IPSET_NAME" src -j DROP
+    iptables -I "$chain" -m set --match-set "$IPSET_NAME" dst -j DROP
+done
+
+raw_patterns="BitTorrent d1:ad2:id d1:q magnet:? announce.php peer_id info_hash GET_announce GET_scrape ut_hub azureus x-peer-id qbittorrent uTorrent Transmission Deluge find_node protocol=BitTorrent"
+read -r -a patterns <<< "$raw_patterns"
+
+for intf in "${INTERFACES[@]}"; do
+    for protocol in tcp udp; do
+        for str in "${patterns[@]}"; do
+            clean_str=$(echo "$str" | tr '_' ' ')
+            iptables -I FORWARD -o "$intf" -p "$protocol" --dport "$HIGH_PORTS" -m string --string "$clean_str" --algo bm --from 0 --to 1500 -j LOG --log-prefix "$LOG_PREFIX OUT: "
+            iptables -I FORWARD -i "$intf" -p "$protocol" --sport "$HIGH_PORTS" -m string --string "$clean_str" --algo bm --from 0 --to 1500 -j LOG --log-prefix "$LOG_PREFIX IN: "
+        done
+    done
+done
+
+cleanup() {
+    echo -e "\n[+] Limpiando reglas..."
+    iptables-save | grep -v "$IPSET_NAME" | iptables-restore
+    ipset destroy "$IPSET_NAME" 2>/dev/null
+    exit 0
+}
+trap cleanup SIGINT SIGTERM
+
+echo "[+] Script activo. Monitoreando journald..."
+journalctl -kf -o short | while read -r line; do
+    if echo "$line" | grep -q "$LOG_PREFIX"; then
+        src_ip=$(echo "$line" | grep -oP 'SRC=\K[0-9.]+')
+        dst_ip=$(echo "$line" | grep -oP 'DST=\K[0-9.]+')
+        for ip in "$src_ip" "$dst_ip"; do
+            if [[ $ip =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+                if is_server_ip "$ip" || is_dns_ip "$ip" || is_ignored_ip_range "$ip"; then
+                    continue
+                fi
+                if ! ipset test "$IPSET_NAME" "$ip" 2>/dev/null; then
+                    echo "[BLOQUEADO] IP: $ip"
+                    ipset add "$IPSET_NAME" "$ip"
+                    (sleep "$BLOCK_DURATION"; ipset del "$IPSET_NAME" "$ip" 2>/dev/null) &
+                fi
+            fi
+        done
+    fi
+done            break
         fi
     done
 
