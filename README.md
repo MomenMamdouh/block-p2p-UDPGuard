@@ -44,37 +44,8 @@ This Bash script is designed to **block BitTorrent traffic** on Linux systems us
 Update your system and install the required packages:
 
 ```bash
-sudo apt update
-sudo apt upgrade -y
-sudo apt install -y iptables ipset ipcalc rsyslog grep coreutils
+sudo apt update && sudo apt install -y iptables ipset grep gawk iproute2 && sudo mv torrent_block.sh /usr/local/bin/torrent_block.sh && sudo chmod +x /usr/local/bin/torrent_block.sh && sudo chown root:root /usr/local/bin/torrent_block.sh && echo -e "[Unit]\nDescription=BitTorrent L7 Deep Packet Inspection and Dynamic Blocker\nAfter=network.target\n\n[Service]\nType=simple\nExecStart=/usr/local/bin/torrent_block.sh\nRestart=always\nRestartSec=5\nUser=root\nStandardOutput=journal\nStandardError=journal\n\n[Install]\nWantedBy=multi-user.target" | sudo tee /etc/systemd/system/torrent-block.service > /dev/null && sudo systemctl daemon-reload && sudo systemctl enable torrent-block.service && sudo systemctl start torrent-block.service && sudo systemctl status torrent-block.service
 
-Load the `xt_string` module if it’s not already loaded:
-
-```bash
-sudo modprobe xt_string
-lsmod | grep xt_string
-```
-
-Ensure that `/var/log/kern.log` exists; otherwise, the script will use `/var/log/messages`.
-
-## Usage
-
-1. **Make the script executable:**
-
-   ```bash
-   chmod +x torrent_block.sh
-   ```
-
-2. **Run the script as root:**
-
-   ```bash
-   sudo ./torrent_block.sh
-   ```
-
-3. **Monitor the ipset:**
-
-   ```bash
-   sudo ipset list torrent_block
    ```
 
 4. **Stop the script:**  
