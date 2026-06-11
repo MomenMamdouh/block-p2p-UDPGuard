@@ -14,7 +14,7 @@ fi
 # ------------------------------------------------------------------------------
 IPSET_NAME="vless_torrent_block"
 XRAY_LOG="/etc/x-ui/access.log"
-BAN_DURATION=1800   # 30 Minutes 
+BAN_DURATION=1800   # 30 Mins 
 MAX_ENTRIES=200000
 
 # ------------------------------------------------------------------------------
