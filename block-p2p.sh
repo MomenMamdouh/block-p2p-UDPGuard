@@ -15,7 +15,7 @@ fi
 # ------------------------------------------------------------------------------
 IPSET_NAME="vless_torrent_block"
 XRAY_LOG="/var/log/xray/access.log"
-BAN_DURATION=18000   # Time in seconds to ban the client IP (18000s = 5 hours)
+BAN_DURATION=1800   # Time in seconds to ban the client IP (18000s = 5 hours)
 MAX_ENTRIES=200000
 
 # ------------------------------------------------------------------------------
