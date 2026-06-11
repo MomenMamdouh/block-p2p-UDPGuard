@@ -1,6 +1,6 @@
 #!/bin/bash
 # ==============================================================================
-# 3x-ui / Xray Multi-Layered Torrent Traffic Blocker (Corrected Path)
+# 3x-ui / Xray Multi-Layered Torrent Traffic Blocker (Tailored Version)
 # Uses Xray Application Decryption + Dynamic Native IPset Firewall Ban
 # ==============================================================================
 
@@ -68,7 +68,7 @@ cleanup() {
 trap cleanup SIGINT SIGTERM
 
 # ------------------------------------------------------------------------------
-# REAL-TIME PARSING ENGINE
+# REAL-TIME PARSING ENGINE (EXACT MATCH FOR 3X-UI LOG FORMAT)
 # ------------------------------------------------------------------------------
 if [ ! -f "$XRAY_LOG" ]; then
     echo "[-] Error: Xray access log file not found at $XRAY_LOG"
@@ -76,22 +76,23 @@ if [ ! -f "$XRAY_LOG" ]; then
 fi
 
 echo "[+] System fully armed. Monitoring decrypted Xray streams..."
-echo "[+] Matching outbound tag: [blocked]"
+echo "[+] Target Outbound Tag: [blocked]"
 
 tail -Fn0 "$XRAY_LOG" | while read -r line; do
     if echo "$line" | grep -q "\[blocked\]"; then
         
-        # التقاط أول IPv4 يظهر في السطر وتنظيفه من الـ Port
-        client_ip=$(echo "$line" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+(:[0-9]+)?' | head -n 1 | cut -d':' -f1)
+        # الـ Regex السحري: يبحث صراحة عن كلمة from tcp: أو from udp: ويلتقط الآي بي الحقيقي للمستخدم الذي يليها مباشرة
+        client_ip=$(echo "$line" | grep -oP 'from (tcp|udp):\K[0-9.]+(?=:)')
 
         if [ -n "$client_ip" ]; then
-            if is_server_ip "$client_ip" || is_dns_ip "$client_ip" || is_ignored_ip_range "$client_ip"; then
+            # استثناء لوكال هيدر والشبكات الحساسة لعدم قفل السيرفر
+            if [ "$client_ip" == "127.0.0.1" ] || is_server_ip "$client_ip" || is_dns_ip "$client_ip" || is_ignored_ip_range "$client_ip"; then
                 continue
             fi
 
-            # إضافة الحظر الفوري في النواة (Kernel)
+            # تطبيق الحظر الصاعق في جدار الحماية
             if ! ipset test "$IPSET_NAME" "$client_ip" 2>/dev/null; then
-                echo "[BAN] Torrent detected from client: $client_ip. Dropping firewall access."
+                echo "[BAN] Torrent detected from client: $client_ip (Account: $(echo "$line" | grep -oP 'email:\s*\K.+')). Dropping firewall access."
                 ipset add "$IPSET_NAME" "$client_ip" -exist
             fi
         fi
