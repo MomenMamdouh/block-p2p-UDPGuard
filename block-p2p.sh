@@ -18,7 +18,7 @@ BAN_DURATION=300   # 5 Mins
 MAX_ENTRIES=200000
 
 # 📝 ضع هنا إيميلات المستخدمين المراد استثناؤهم من الحظر (افصل بينهم بمسافة)
-EXEMPTED_EMAILS="momen-tcp"
+EXEMPTED_EMAILS="user1 user2"
 
 # 📝 ضع هنا أي IPs ثابتة تريد استثناءها صراحة إن وجدت
 #EXEMPTED_IPS="192.168.1.100 203.0.113.50"
