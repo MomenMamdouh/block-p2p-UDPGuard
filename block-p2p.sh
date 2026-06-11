@@ -1,6 +1,6 @@
 #!/bin/bash
 # ==============================================================================
-# 3x-ui / Xray Multi-Layered Torrent Traffic Blocker (Modified for "blocked" tag)
+# Xray Multi-Layered Torrent Traffic Blocker (Modified for "blocked" tag)
 # Uses Xray Application Decryption + Dynamic Native IPset Firewall Ban
 # ==============================================================================
 
